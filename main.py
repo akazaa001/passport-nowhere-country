@@ -12,7 +12,25 @@ Output: $MAKEFUN_OUTPUT_DIR/entry.png (default /output/entry.png),
 """
 
 import os
-from PIL import Image, ImageDraw, ImageFont
+import sys
+
+# The grader runs `python3 -P -s /bot/main.py` in the pinned python image,
+# which ships no Pillow: vendor it (and the DejaVu fonts) in this repo and
+# put the vendor dir on sys.path before importing PIL. -P keeps the script
+# dir off sys.path, so resolve it from __file__ explicitly. If the vendored
+# wheel cannot load (wrong interpreter), fall back to a system Pillow.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_VENDOR = os.path.join(_HERE, "vendor")
+if os.path.isdir(_VENDOR) and _VENDOR not in sys.path:
+    sys.path.insert(0, _VENDOR)
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    for _m in [m for m in sys.modules if m == "PIL" or m.startswith("PIL.")]:
+        del sys.modules[_m]
+    if _VENDOR in sys.path:
+        sys.path.remove(_VENDOR)
+    from PIL import Image, ImageDraw, ImageFont
 
 # ---------------------------------------------------------------------------
 # The invented country and its travel history (every date must agree:
@@ -53,13 +71,14 @@ INK = (28, 30, 34)
 FAINT = (96, 96, 88)
 RULE = (120, 118, 106)
 
-FONT_DIR = "/usr/share/fonts/truetype/dejavu"
+FONT_DIR = os.path.join(_HERE, "vendor", "fonts")
 
 
 def font(name, size):
     """Load a DejaVu font, falling back gracefully if the sandbox lacks it."""
     for path in (
         os.path.join(FONT_DIR, name),
+        os.path.join("/usr/share/fonts/truetype/dejavu", name),
         os.path.join("/usr/share/fonts/truetype/liberation", name),
     ):
         try:
