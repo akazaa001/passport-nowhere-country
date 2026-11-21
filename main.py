@@ -13,23 +13,34 @@ Output: $MAKEFUN_OUTPUT_DIR/entry.png (default /output/entry.png),
 
 import os
 import sys
+import tempfile
+import zipfile
 
 # The grader runs `python3 -P -s /bot/main.py` in the pinned python image,
-# which ships no Pillow: vendor it (and the DejaVu fonts) in this repo and
-# put the vendor dir on sys.path before importing PIL. -P keeps the script
-# dir off sys.path, so resolve it from __file__ explicitly. If the vendored
-# wheel cannot load (wrong interpreter), fall back to a system Pillow.
+# which ships no Pillow. This repo vendors Pillow 13 (cp313 wheel) as a
+# single binary archive, vendor/pillow.zip, plus the DejaVu fonts in
+# vendor/fonts/. At runtime the archive is extracted to a temp dir and put
+# on sys.path (the .so files keep their $ORIGIN/../pillow.libs RPATH, so
+# the layout inside the zip must stay PIL/ beside pillow.libs/). -P keeps
+# the script dir off sys.path, so resolve it from __file__ explicitly. If
+# the vendored wheel cannot load (wrong interpreter), fall back to a
+# system Pillow.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _VENDOR = os.path.join(_HERE, "vendor")
-if os.path.isdir(_VENDOR) and _VENDOR not in sys.path:
-    sys.path.insert(0, _VENDOR)
+_ZIP = os.path.join(_VENDOR, "pillow.zip")
+_PIL_DIR = None
+if os.path.isfile(_ZIP):
+    _PIL_DIR = tempfile.mkdtemp(prefix="pillow-")
+    with zipfile.ZipFile(_ZIP) as _z:
+        _z.extractall(_PIL_DIR)
+    sys.path.insert(0, _PIL_DIR)
 try:
     from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     for _m in [m for m in sys.modules if m == "PIL" or m.startswith("PIL.")]:
         del sys.modules[_m]
-    if _VENDOR in sys.path:
-        sys.path.remove(_VENDOR)
+    if _PIL_DIR is not None and _PIL_DIR in sys.path:
+        sys.path.remove(_PIL_DIR)
     from PIL import Image, ImageDraw, ImageFont
 
 # ---------------------------------------------------------------------------
